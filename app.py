@@ -122,9 +122,33 @@ def get_groq_response(user_prompt):
             system_prompt=create_system_prompt()
         )
         
-        # Get response
-        response = assistant.chat(message=user_prompt)
-        return response.content
+        # Get response - collect full response from generator
+        response_generator = assistant.chat(message=user_prompt)
+        
+        # Convert the generator to a full response
+        # If response_generator is an object with a content attribute
+        if hasattr(response_generator, 'content'):
+            return response_generator.content
+        
+        # If response_generator is a generator, collect the response chunks
+        full_response = ""
+        try:
+            for chunk in response_generator:
+                if isinstance(chunk, str):
+                    full_response += chunk
+                elif hasattr(chunk, 'content'):
+                    full_response += chunk.content
+                elif hasattr(chunk, 'delta') and hasattr(chunk.delta, 'content'):
+                    full_response += chunk.delta.content
+        except Exception as e:
+            # If it's not actually a generator (might be a direct string response)
+            if isinstance(response_generator, str):
+                full_response = response_generator
+            else:
+                st.error(f"Error processing response chunks: {e}")
+                return f"Error processing response: {str(e)}"
+        
+        return full_response
     except Exception as e:
         st.error(f"Error communicating with Groq: {e}")
         return f"Error: {str(e)}"
