@@ -8,8 +8,6 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-groq_api_key = os.getenv("GROQ_API_KEY")
-
 # Set page config
 st.set_page_config(page_title="CSV Chat App", layout="wide")
 
@@ -17,11 +15,20 @@ st.set_page_config(page_title="CSV Chat App", layout="wide")
 st.title("🤖 Multiple CSV Chat App")
 st.markdown("Upload multiple CSV files and chat with your data")
 
-# Sidebar for API key and file uploads
+# Get API key from environment variable
+groq_api_key = os.getenv("GROQ_API_KEY")
+
+# Sidebar for model selection and file uploads
 with st.sidebar:
     st.header("Configuration")
     
-    # API key input
+    # Display API key status
+    if groq_api_key:
+        st.success("GROQ_API_KEY loaded from .env file")
+    else:
+        # Fallback to manual input if not in environment
+        groq_api_key = st.text_input("GROQ_API_KEY not found in .env. Enter it here:", type="password")
+    
     model_name = st.selectbox(
         "Select Groq Model:",
         ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"]
@@ -87,8 +94,7 @@ def create_system_prompt():
             prompt += f"Sample data (first 5 rows):\n"
             prompt += df.head(5).to_string() + "\n\n"
     
-    prompt += "When answering questions about the data, be specific about which file you're referring to."
-    prompt += "You can perform data analysis tasks like summarizing, comparing, filtering, and visualizing the data."
+    prompt += "When answering questions about the data, be specific about which file you're referring to. "
     prompt += "You can perform aggregation tasks like counting, summing, averaging, and finding the maximum, minimum, and average values of columns."
     return prompt
 
@@ -98,10 +104,10 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Function to get response from Groq
-def get_groq_response(messages):
-    # if not groq_api_key:
-    #     st.error("Please enter your Groq API key in the sidebar")
-    #     return "Please enter your Groq API key to continue."
+def get_groq_response(user_prompt):
+    if not groq_api_key:
+        st.error("Please enter your Groq API key in the sidebar or add it to your .env file")
+        return "Please provide a Groq API key to continue."
     
     try:
         # Initialize Groq
@@ -116,11 +122,8 @@ def get_groq_response(messages):
             system_prompt=create_system_prompt()
         )
         
-        # Remove system messages from the messages list
-        user_messages = [msg for msg in messages if msg["role"] != "system"]
-        
         # Get response
-        response = assistant.chat(messages=user_messages)
+        response = assistant.chat(message=user_prompt)
         return response.content
     except Exception as e:
         st.error(f"Error communicating with Groq: {e}")
@@ -143,7 +146,7 @@ if prompt := st.chat_input("Ask about your CSV data..."):
                 response = "Please upload at least one CSV file to begin analyzing data."
             else:
                 # Get response from Groq
-                response = get_groq_response(st.session_state.messages)
+                response = get_groq_response(prompt)
             
             # Display response
             st.markdown(response)
@@ -155,7 +158,7 @@ if prompt := st.chat_input("Ask about your CSV data..."):
 st.markdown("---")
 st.markdown("""
 ### How to use this app:
-1. Enter your Groq API key in the sidebar
+1. Create a `.env` file in the same directory with `GROQ_API_KEY=your_api_key_here`
 2. Upload one or more CSV files
 3. Chat with the assistant about your data
 4. Ask questions like:
